@@ -1,0 +1,163 @@
+---
+title: "Title of Your Report"
+author: "Names of your Group Members"
+date: "Due Date"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+
+# Loading in the cleaned survey Data
+survey_data <- read_csv("~/R/Help_temp/2-PS3/survey_data.csv")
+
+# Loading in the cleaned census Data
+census_data <- read_csv("~/R/Help_temp/2-PS3/census_data.csv")
+
+```
+
+# Title of your Report
+
+## Name(s) of Author(s) 
+## Date
+
+
+# Model
+
+Here we are interested in predicting the popular vote outcome of the 2020 American federal election (include citation). To do this we are employing a post-stratification technique. In the following sub-sections I will describe the model specifics and the post-stratification calculation.
+
+
+## Model Specifics
+I will (incorrectly) be using a linear regression model to model the proportion of voters who will vote for Donald Trump. This is a naive model. I will only be using age, which is recorded as a numeric variable, to model the probability of voting for Donald Trump. The simple linear regression model I am using is:
+
+$$ log(\frac{p}{1-p}) = \beta_0+ + \beta_1 x_{Age} + \beta_2 x_{employment} + \beta_3 x_{gender} + \beta_4 x_{Race} + \beta_5 x_{HHInc} + \beta_6 x_{Educ} + \beta_7 x_{State} + \epsilon$$
+
+Where $y$ represents the proportion of voters who will vote for Donald Trump. Similarly, $\beta_0$ represents the intercept of the model, and is the probability of voting for Donald Trump at age 0. Additionally, $\beta_1$ represents the slope of the model. So, for everyone one unit increase in age, we expect a $\beta_1$ increase in the probability of voting for Donald Trump.
+
+```{r}
+# Creating the Model
+model <- glm(vote_trump ~ .,
+            data=survey_data, family= "binomial")
+
+# Model Results (to Report in Results section)
+summary(model)
+# OR
+# broom::tidy(model)
+
+# Check beta for different categories
+model$coefficients[6:28] %>%
+  t() %>%
+  as_tibble() %>%
+  pivot_longer(cols = 1:23, names_to = "Income", values_to = "Beta") %>%
+  mutate(Income = str_remove(Income, "household_income")) %>%
+  ggplot(aes(Income, Beta)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+# Check beta for different categories
+model$coefficients[29:34] %>%
+  t() %>%
+  as_tibble() %>%
+  pivot_longer(cols = 1:6, names_to = "Education", values_to = "Beta") %>%
+  mutate(Education = str_remove(Education, "education")) %>%
+  ggplot(aes(Education, Beta)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+# Check beta for different categories
+model$coefficients[35:84] %>%
+  t() %>%
+  as_tibble() %>%
+  pivot_longer(cols = 1:50, names_to = "State", values_to = "Beta") %>%
+  mutate(State = str_remove(State, "state")) %>%
+  ggplot(aes(State, Beta)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+```
+
+## Post-Stratification 
+
+In order to estimate the proportion of voters who will vote for Donald Trump I need to perform a post-stratification analysis. Here I create cells based off different ages. Using the model described in the previous sub-section I will estimate the proportion of voters in each age bin. I will then weight each proportion estimate (within each bin) by the respective population size of that bin and sum those values and divide that by the entire population size. 
+
+```{r, include=TRUE}
+
+# Here I will perform the post-stratification calculation
+census_data$logodds_estimate <-
+  model %>%
+  predict(newdata = census_data)
+
+census_data$estimate <-
+  exp(census_data$logodds_estimate)/(1+exp(census_data$logodds_estimate))
+
+# Total Popular vote (everyone)
+census_data %>%
+  mutate(alp_predict_prop = estimate*n) %>%
+  summarise(alp_predict = sum(alp_predict_prop)/sum(n))
+
+# different group age vote for trump odds
+census_data %>%
+  mutate(alp_predict_prop = estimate*n) %>%
+  group_by(age) %>%
+  summarise(alp_predict = sum(alp_predict_prop)/sum(n)) %>%
+  ggplot(aes(age, alp_predict)) +
+  geom_line()
+
+# different group state vote for trump odds
+census_data %>%
+  mutate(alp_predict_prop = estimate*n) %>%
+  group_by(state) %>%
+  summarise(alp_predict = sum(alp_predict_prop)/sum(n)) %>%
+  ggplot(aes(state, alp_predict)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+# different group income vote for trump odds
+census_data %>%
+  mutate(alp_predict_prop = estimate*n) %>%
+  group_by(household_income) %>%
+  summarise(alp_predict = sum(alp_predict_prop)/sum(n)) %>%
+  ggplot(aes(household_income, alp_predict)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+
+# different group education vote for trump odds
+census_data %>%
+  mutate(alp_predict_prop = estimate*n) %>%
+  group_by(education) %>%
+  summarise(alp_predict = sum(alp_predict_prop)/sum(n)) %>%
+  ggplot(aes(education, alp_predict)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+```
+
+
+# Results
+
+Here you will include all results. This includes descriptive statistics, graphs, figures, tables, and model results. Please ensure that everything is well formatted and in a report style. You must also provide an explanation of the results in this section. 
+
+Please ensure that everything is well labelled. So if you have multiple histograms and plots, calling them Figure 1, 2, 3, etc. and referencing them as Figure 1, Figure 2, etc. in your report will be expected. The reader should not get lost in a sea of information. Make sure to have the results be clean, well formatted and digestible.
+
+# Discussion
+
+Here you will summarize the previous sections and discuss conclusions drawn from the results. Make sure to elaborate and connect your analysis to the goal of the study.
+
+## Weaknesses
+
+Here we discuss weaknesses of the study, data, analysis, etc. You can also discuss areas for improvement.
+
+## Next Steps
+
+Here you discuss subsequent work to be done after this report. This can include next steps in terms of statistical analysis (perhaps there is a more efficient algorithm available, or perhaps there is a caveat in the data that would allow for some new technique). Future steps should also be specified in terms of the study setting (eg. including a follow-up survey on something, or a subsequent study that would complement the conclusions of your report).
+
+
+# References
+
+Steven Ruggles, Sarah Flood, Ronald Goeken, Josiah Grover, Erin Meyer, Jose Pacas and Matthew Sobek. IPUMS USA: Version 10.0 [dataset]. Minneapolis, MN: IPUMS, 2020. https://doi.org/10.18128/D010.V10.0
+
+Tausanovitch, Chris and Lynn Vavreck. 2020. Democracy Fund + UCLA Nationscape, October 10-17, 2019 (version 20200814). Retrieved from https://www.voterstudygroup.org/
+
